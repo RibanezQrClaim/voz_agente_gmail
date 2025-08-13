@@ -1,0 +1,117 @@
+{
+  "me": {
+    "name": "Carolina",
+    "email": "carolina@home.cl",
+    "role": "gerente_ventas"
+  },
+  "tiendas": [
+    {
+      "name": "Tienda 1",
+      "email": "tienda1@home.cl"
+    },
+    {
+      "name": "Tienda 2",
+      "email": "tienda2@home.cl"
+    },
+    {
+      "name": "Tienda 3",
+      "email": "tienda3@home.cl"
+    },
+    {
+      "name": "Tienda 4",
+      "email": "tienda4@home.cl"
+    },
+    {
+      "name": "Tienda 5",
+      "email": "tienda5@home.cl"
+    },
+    {
+      "name": "Tienda 6",
+      "email": "tienda6@home.cl"
+    },
+    {
+      "name": "Tienda 7",
+      "email": "tienda7@home.cl"
+    },
+    {
+      "name": "Tienda 8",
+      "email": "tienda8@home.cl"
+    },
+    {
+      "name": "Tienda 9",
+      "email": "tienda9@home.cl"
+    },
+    {
+      "name": "Tienda 10",
+      "email": "tienda10@home.cl"
+    }
+  ],
+  "supervisoras": [
+    {
+      "name": "Sup 1",
+      "email": "sup1@home.cl"
+    },
+    {
+      "name": "Sup 2",
+      "email": "sup2@home.cl"
+    },
+    {
+      "name": "Sup 3",
+      "email": "sup3@home.cl"
+    }
+  ],
+  "proveedores": [
+    {
+      "name": "Proveedor 1",
+      "email": "prov1@acme.com"
+    },
+    {
+      "name": "Proveedor 2",
+      "email": "prov2@acme.com"
+    },
+    {
+      "name": "Proveedor 3",
+      "email": "prov3@acme.com"
+    }
+  ],
+  "gerentes_mall": [
+    {
+      "name": "Mall 1",
+      "email": "mall1@mall1.cl"
+    },
+    {
+      "name": "Mall 2",
+      "email": "mall2@mall2.cl"
+    },
+    {
+      "name": "Mall 3",
+      "email": "mall3@mall3.cl"
+    },
+    {
+      "name": "Mall 4",
+      "email": "mall4@mall4.cl"
+    },
+    {
+      "name": "Mall 5",
+      "email": "mall5@mall5.cl"
+    }
+  ],
+  "internos": [
+    {
+      "name": "RRHH",
+      "email": "rrhh@home.cl"
+    },
+    {
+      "name": "Logística",
+      "email": "logistica@home.cl"
+    },
+    {
+      "name": "Finanzas",
+      "email": "finanzas@home.cl"
+    },
+    {
+      "name": "TI",
+      "email": "ti@home.cl"
+    }
+  ]
+}

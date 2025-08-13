@@ -1,106 +1,130 @@
-from utils.dates import get_rfc3339_today
-from core.llm.llm_client import resumir_texto_llm
-import base64
+# core/gmail/leer.py
+from typing import List, Dict, Any, Optional
+import os
 
-EXCLUIR_CATEGORIAS = "-category:promotions -category:social -category:updates"
+# Etiquetas/categorías a excluir
+EXCLUDED_LABELS = {
+    "CATEGORY_SOCIAL",
+    "CATEGORY_PROMOTIONS",
+    "CATEGORY_UPDATES",
+    "CATEGORY_FORUMS",
+    "SPAM",
+    "TRASH",
+}
 
+# Máximo de correos a considerar (puede venir por .env)
+GMAIL_MAX_RESULTS = int(os.getenv("GMAIL_MAX_RESULTS", "10"))
 
-def remitentes_hoy(service):
-    """Devuelve un string con los remitentes únicos que enviaron correos hoy, uno por línea"""
-    today_rfc3339 = get_rfc3339_today()
-    query = f"after:{today_rfc3339} is:inbox {EXCLUIR_CATEGORIAS}"
-    results = service.users().messages().list(userId='me', q=query, maxResults=50).execute()
-    messages = results.get('messages', [])
+# Campos mínimos para bajar latencia (partial response)
+MESSAGE_FIELDS_LIST = "messages(id),nextPageToken"
+MESSAGE_FIELDS_GET = "id,internalDate,labelIds,snippet,payload(headers(name,value))"
 
-    remitentes = set()
-    for msg in messages:
-        detalle = service.users().messages().get(userId='me', id=msg['id'], format='metadata', metadataHeaders=['From']).execute()
-        headers = detalle.get('payload', {}).get('headers', [])
-        for h in headers:
-            if h['name'] == 'From':
-                remitentes.add(h['value'])
-
-    if not remitentes:
-        return "No recibiste correos hoy."
-
-    def limpiar_remitente(r):
-        if "<" in r:
-            return r.split("<")[0].strip()
-        return r.strip()
-
-    nombres_limpios = [limpiar_remitente(r) for r in remitentes]
-    nombres_limpios.sort()
-
-    return "\n".join(nombres_limpios)
+# Solo headers que usamos
+METADATA_HEADERS = ["From", "Subject", "Date"]
 
 
-def resumen_correos_hoy(service, cantidad=5):
-    """Devuelve un resumen LLM conjunto de los correos de hoy, limitado a 300 caracteres."""
-    today_rfc3339 = get_rfc3339_today()
-    query = f"after:{today_rfc3339} is:inbox {EXCLUIR_CATEGORIAS}"
-    results = service.users().messages().list(userId='me', q=query, maxResults=cantidad).execute()
-    messages = results.get('messages', [])
-
-    if not messages:
-        return "No tienes correos nuevos hoy."
-
-    bloques = []
-    for i, msg in enumerate(reversed(messages), start=1):  # orden cronológico
-        detalle = service.users().messages().get(userId='me', id=msg['id'], format='full').execute()
-        headers = detalle['payload'].get('headers', [])
-        remitente = next((h['value'] for h in headers if h['name'] == 'From'), '(Desconocido)')
-        asunto = next((h['value'] for h in headers if h['name'] == 'Subject'), '(Sin asunto)')
-
-        cuerpo = ""
-        if 'parts' in detalle['payload']:
-            for part in detalle['payload']['parts']:
-                if part.get('mimeType') == 'text/plain' and 'data' in part['body']:
-                    cuerpo = base64.urlsafe_b64decode(part['body']['data']).decode("utf-8", errors="ignore")
-                    break
-
-        if not cuerpo:
-            cuerpo = detalle.get('snippet', '')
-
-        bloques.append(f"Correo {i}:\nDe: {remitente}\nAsunto: {asunto}\n{cuerpo.strip()}")
-
-    texto_completo = "\n\n".join(bloques)
-    resumen_final = resumir_texto_llm(texto_completo)
-
-    return resumen_final[:300] + ("..." if len(resumen_final) > 300 else "")
-
-
-def contar_correos_no_leidos(service):
-    """Cuenta la cantidad de correos no leídos en la bandeja de entrada."""
-    query = f"is:unread in:inbox {EXCLUIR_CATEGORIAS}"
-    results = service.users().messages().list(userId='me', q=query).execute()
-    mensajes = results.get('messages', [])
-    return len(mensajes) if mensajes else 0
-
-
-def leer_ultimo_correo(service):
+def _primary_query(base_query: Optional[str] = None) -> str:
     """
-    Devuelve el último correo recibido, sin importar la fecha.
+    Construye un query que prioriza bandeja principal y excluye categorías ruidosas.
     """
-    try:
-        resultado = service.users().messages().list(
-            userId='me',
-            maxResults=1,
-            q="",  # sin filtro de fecha
-        ).execute()
+    parts = [
+        "category:primary",
+        "-category:social",
+        "-category:promotions",
+        "-category:updates",
+        "-category:forums",
+        "-in:spam",
+        "-in:trash",
+    ]
+    if base_query:
+        parts.append(f"({base_query})")
+    return " ".join(parts)
 
-        mensajes = resultado.get('messages', [])
-        if not mensajes:
-            return "No tienes correos nuevos."
 
-        mensaje_id = mensajes[0]['id']
-        mensaje = service.users().messages().get(userId='me', id=mensaje_id, format='metadata').execute()
+def _list_primary_message_ids(
+    service,
+    max_results: int = GMAIL_MAX_RESULTS,
+    base_query: Optional[str] = None,
+) -> List[str]:
+    """
+    Lista IDs de mensajes de la bandeja principal con exclusiones y campos mínimos.
+    """
+    q = _primary_query(base_query)
+    resp = (
+        service.users()
+        .messages()
+        .list(
+            userId="me",
+            q=q,
+            labelIds=["INBOX"],
+            maxResults=max_results,
+            includeSpamTrash=False,  # defensivo
+            fields=MESSAGE_FIELDS_LIST,  # limita el payload
+        )
+        .execute()
+        or {}
+    )
+    msgs = resp.get("messages", []) or []
+    return [m["id"] for m in msgs]
 
-        headers = mensaje.get("payload", {}).get("headers", [])
-        remitente = next((h["value"] for h in headers if h["name"] == "From"), "Remitente desconocido")
-        asunto = next((h["value"] for h in headers if h["name"] == "Subject"), "(Sin asunto)")
 
-        return f"📩 De: {remitente}\n📌 Asunto: {asunto}"
+def _get_message_metadata(service, msg_id: str) -> Dict[str, Any]:
+    """
+    Trae solo metadata y snippet; filtra por labelIds en cliente por seguridad.
+    """
+    msg = (
+        service.users()
+        .messages()
+        .get(
+            userId="me",
+            id=msg_id,
+            format="metadata",
+            metadataHeaders=METADATA_HEADERS,
+            fields=MESSAGE_FIELDS_GET,  # limita el payload
+        )
+        .execute()
+        or {}
+    )
 
-    except Exception as e:
-        print("❌ Error al leer el último correo:", e)
-        return "No se pudo obtener el último correo."
+    # Filtro defensivo por labels (por si el query igual trajo algo no deseado)
+    label_ids = set(msg.get("labelIds", []) or [])
+    if label_ids & EXCLUDED_LABELS:
+        return {}  # descartar silenciosamente
+
+    return msg
+
+
+def remitentes_hoy(service) -> List[str]:
+    """
+    Retorna remitentes de últimos N correos en Primary estrictamente de hoy (≈ últimas 24h).
+    """
+    ids = _list_primary_message_ids(service, GMAIL_MAX_RESULTS, base_query="newer_than:1d")
+    remitentes: List[str] = []
+    for mid in ids:
+        meta = _get_message_metadata(service, mid)
+        if not meta:
+            continue
+        headers = {h["name"].lower(): h["value"] for h in meta.get("payload", {}).get("headers", [])}
+        frm = headers.get("from") or ""
+        if frm:
+            remitentes.append(frm)
+    return remitentes
+
+
+def leer_ultimo(service) -> Dict[str, Any]:
+    """
+    Retorna metadata del último correo 'bueno' (Primary).
+    """
+    ids = _list_primary_message_ids(service, max_results=1)
+    if not ids:
+        return {}
+    meta = _get_message_metadata(service, ids[0])
+    return meta or {}
+
+
+def contar_no_leidos(service) -> int:
+    """
+    Cuenta no leídos SOLO en Primary (excluyendo Social/Promos/etc.).
+    """
+    ids = _list_primary_message_ids(service, base_query="is:unread")
+    return len(ids)

@@ -1,17 +1,48 @@
-from flask import Blueprint, jsonify
-from core.gmail.leer import remitentes_hoy
-from core.gmail.auth import get_authenticated_service
+# interfaces/gmail_routes.py
+from __future__ import annotations
+import os
+from flask import Blueprint, request, jsonify
 
-gmail_bp = Blueprint('gmail', __name__)
+gmail_bp = Blueprint("gmail", __name__)
 
-@gmail_bp.route('/api/gmail/quien-escribio-hoy', methods=['GET'])
-def endpoint_quien_escribio_hoy():
-    service = get_authenticated_service()
-    lista = remitentes_hoy(service)
+USE_FAKE = os.getenv("USE_FAKE_GMAIL", "false").lower() == "true"
 
-    nombres = lista.split("\n")
-    if not nombres or nombres == ["No recibiste correos hoy."]:
-        return jsonify({"respuesta": "No recibiste correos hoy."})
+if USE_FAKE:
+    # Backend simulado
+    from utils.fake_gmail import leer_ultimo, remitentes_hoy, contar_no_leidos, buscar
+else:
+    # Backend real (Gmail API)
+    from core.gmail.leer import leer_ultimo, remitentes_hoy, contar_no_leidos
+    from core.gmail.buscar import buscar
 
-    respuesta = "Hoy te escribieron:\n" + "\n".join(f"- {n}" for n in nombres)
-    return jsonify({"respuesta": respuesta})
+
+@gmail_bp.get("/gmail/ultimo")
+def http_ultimo():
+    msg = leer_ultimo()
+    if not msg:
+        return jsonify({"data": None}), 200
+    return jsonify({"data": msg}), 200
+
+
+@gmail_bp.get("/gmail/remitentes_hoy")
+def http_remitentes_hoy():
+    senders = remitentes_hoy()
+    return jsonify({"data": senders}), 200
+
+
+@gmail_bp.get("/gmail/no_leidos")
+def http_no_leidos():
+    n = contar_no_leidos()
+    return jsonify({"data": n}), 200
+
+
+@gmail_bp.post("/gmail/buscar")
+def http_buscar():
+    payload = request.get_json(silent=True) or {}
+    query = (payload.get("query") or "").strip()
+    max_results = int(payload.get("max", 20))
+    if not query:
+        return jsonify({"error": {"code": "BAD_REQUEST", "message": "Falta 'query'."}}), 400
+    results = buscar(query, max_results=max_results)
+    return jsonify({"data": results}), 200
+

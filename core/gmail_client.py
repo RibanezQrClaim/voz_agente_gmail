@@ -1,74 +1,54 @@
-from googleapiclient.discovery import build
-from datetime import datetime
-import email.utils
+# core/gmail_client.py
+"""Compatibilidad temporal. Usa core.gmail directamente en código nuevo."""
+from typing import List
+import os
+
+from core.gmail import (
+    remitentes_hoy as _remitentes_hoy,
+    leer_ultimo as _leer_ultimo,
+    contar_no_leidos as _contar_no_leidos,
+)
+from utils.summarizer import resumen_correos_hoy as _resumen_correos_hoy
+
+GMAIL_MAX_RESULTS = int(os.getenv("GMAIL_MAX_RESULTS", "10"))
+
 
 def contar_correos_no_leidos(service):
     """
-    Cuenta la cantidad de correos no leídos en la bandeja de entrada.
+    Compat: reporta string con conteo de no leídos en Primary.
     """
-    results = service.users().messages().list(userId='me', q="is:unread").execute()
-    cantidad = len(results.get('messages', []))
+    cantidad = _contar_no_leidos(service)
     if cantidad == 0:
         return "No tienes correos sin leer."
-    elif cantidad == 1:
+    if cantidad == 1:
         return "Tienes 1 correo sin leer."
-    else:
-        return f"Tienes {cantidad} correos sin leer."
+    return f"Tienes {cantidad} correos sin leer."
+
 
 def remitentes_hoy(service):
     """
-    Devuelve una lista única de remitentes que escribieron hoy.
+    Compat: devuelve string con remitentes únicos de las últimas 24h (Primary).
     """
-    hoy = datetime.utcnow().date()
-    query = f"after:{hoy.strftime('%Y/%m/%d')}"
-    results = service.users().messages().list(userId='me', q=query, maxResults=50).execute()
-    mensajes = results.get('messages', [])
-
-    remitentes = set()
-    for msg in mensajes:
-        detalle = service.users().messages().get(
-            userId='me',
-            id=msg['id'],
-            format='metadata',
-            metadataHeaders=['From']
-        ).execute()
-        headers = detalle.get('payload', {}).get('headers', [])
-        for h in headers:
-            if h['name'] == 'From':
-                nombre, correo = email.utils.parseaddr(h['value'])
-                remitentes.add(nombre or correo)
-
+    remitentes: List[str] = _remitentes_hoy(service)
     if not remitentes:
         return "Hoy no has recibido correos nuevos."
 
-    lista = sorted(remitentes)
-    if len(lista) == 1:
-        return f"Hoy te escribió {lista[0]}."
-    else:
-        nombres = ", ".join(lista[:-1]) + " y " + lista[-1]
-        return f"Hoy te escribieron {nombres}."
+    remitentes = sorted(set(remitentes))
+    if len(remitentes) == 1:
+        return f"Hoy te escribió {remitentes[0]}."
+    nombres = ", ".join(remitentes[:-1]) + " y " + remitentes[-1]
+    return f"Hoy te escribieron {nombres}."
 
-def resumen_correos_hoy(service):
+
+def leer_ultimo_correo(service):
     """
-    Genera un resumen con los asuntos de los correos recibidos hoy.
+    Compat: retorna dict con metadata del último correo (Primary).
     """
-    hoy = datetime.utcnow().date()
-    query = f"after:{hoy.strftime('%Y/%m/%d')}"
-    results = service.users().messages().list(userId='me', q=query, maxResults=10).execute()
-    mensajes = results.get('messages', [])
+    return _leer_ultimo(service)
 
-    resumen = []
-    for msg in mensajes:
-        detalle = service.users().messages().get(userId='me', id=msg['id'], format='metadata', metadataHeaders=['Subject']).execute()
-        headers = detalle.get('payload', {}).get('headers', [])
-        for h in headers:
-            if h['name'] == 'Subject':
-                resumen.append(h['value'])
 
-    if not resumen:
-        return "No has recibido correos hoy."
-    elif len(resumen) == 1:
-        return f"Hoy recibiste 1 correo: '{resumen[0]}'."
-    else:
-        texto = "; ".join(f"'{s}'" for s in resumen)
-        return f"Hoy recibiste {len(resumen)} correos. Los asuntos son: {texto}."
+def resumen_correos_hoy(service, cantidad: int = 10):
+    """
+    Delegado al summarizer actual. Mantiene la firma para código legado.
+    """
+    return _resumen_correos_hoy(service, cantidad=cantidad)

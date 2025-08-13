@@ -31,3 +31,6 @@ logs/
 # Archivos del sistema operativo
 .DS_Store
 Thumbs.db
+
+# modelos locales
+models/*.gguf
