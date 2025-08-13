@@ -1,25 +1,20 @@
-# main.py
+# from voz_agente_gmail.interfaces.voice_input import escuchar_comando
+# from voz_agente_gmail.core.intent_detector import detectar_intencion
+# from voz_agente_gmail.core.action_router import ejecutar_accion
+# from voz_agente_gmail.interfaces.voice_output import responder_en_voz
 
-import os
+# def ejecutar_agente_voz(contexto_usuario=None):
+#     comando = escuchar_comando()
+#     intencion = detectar_intencion(comando, contexto_usuario)
+#     respuesta = ejecutar_accion(intencion, comando, contexto_usuario)
+#     responder_en_voz(respuesta)
+
 import sys
-
-# --- Carga .env ANTES de importar módulos del proyecto ---
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except Exception:
-    pass
-
-# Debug rápido: confirma que el .env se cargó
-print(f"LLM_MODE={os.getenv('LLM_MODE')}  MODEL={os.getenv('LLM_LOCAL_MODEL_PATH')}")
-
-# Asegura que los imports relativos funcionen al ejecutar desde la raíz
+import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from flask import Flask, send_from_directory
 from flask_cors import CORS
-
-# Blueprints del proyecto (importar después de load_dotenv)
 from interfaces.gmail_routes import gmail_bp
 from interfaces.comando_api import comando_bp  # 🎯 Director de orquesta
 from interfaces.auth_routes import auth_bp     # 🔐 Login/Logout Gmail
@@ -44,9 +39,4 @@ def static_files(filename):
     return send_from_directory("frontend", filename)
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", "8000"))
-    host = os.getenv("HOST", "127.0.0.1")
-    print(f"🚀 Server starting on http://{host}:{port}")
-    # Evita el doble proceso del reloader que confunde los logs en Windows
-    app.run(debug=True, host=host, port=port, use_reloader=False, threaded=True)
-
+    app.run(debug=True)
